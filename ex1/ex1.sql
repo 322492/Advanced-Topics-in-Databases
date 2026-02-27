@@ -1,0 +1,8 @@
+WITH RECURSIVE ex1 AS(
+    SELECT 1 AS x
+    UNION ALL
+    SELECT x + 1
+    FROM ex1
+    WHERE x < 20
+)
+SELECT * FROM ex1;
