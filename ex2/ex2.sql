@@ -1,9 +1,9 @@
 CREATE FUNCTION municipality_label(p_code text)
 RETURNS text AS $$
-    DECLARE
+DECLARE
     m_name text;
     m_code text;
-    BEGIN
+BEGIN
     SELECT name, code
     INTO m_name, m_code
     FROM municipality
@@ -14,5 +14,5 @@ RETURNS text AS $$
     END IF;
 
     RETURN m_name || '(' || m_code || ')';
-    END;
+END;
 $$ LANGUAGE plpgsql;

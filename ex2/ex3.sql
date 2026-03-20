@@ -1,8 +1,8 @@
 CREATE FUNCTION municipality_size_class(p_code text)
 RETURNS text AS $$
-    DECLARE
+DECLARE
     m_mandates bigint;
-    BEGIN
+BEGIN
     SELECT mandates
     INTO m_mandates
     FROM municipality
@@ -15,5 +15,5 @@ RETURNS text AS $$
     ELSE
         RETURN 'large';
     END IF;
-    END;
+END;
 $$ LANGUAGE plpgsql;

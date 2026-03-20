@@ -1,8 +1,8 @@
 CREATE FUNCTION party_name_by_shortname(p_shortname text)
 RETURNS text AS $$
-    DECLARE
-        p_name text;
-    BEGIN
+DECLARE
+    p_name text;
+BEGIN
     SELECT name
     INTO p_name
     FROM party
@@ -13,5 +13,5 @@ RETURNS text AS $$
     END IF;
 
     RETURN p_name;
-    END;
+END;
 $$ LANGUAGE plpgsql;

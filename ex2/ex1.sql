@@ -1,12 +1,13 @@
 CREATE FUNCTION municipality_mandates(p_code text) 
 RETURNS bigint AS $$
-    DECLARE
+DECLARE
     v_mandates bigint;
-    BEGIN
+BEGIN
     SELECT mandates
     INTO v_mandates
     FROM municipality
     WHERE code = p_code;
+
     RETURN v_mandates;
-    END;
+END;
 $$ LANGUAGE plpgsql;

@@ -1,15 +1,15 @@
 CREATE TABLE party_votes_log(
-municipality_code text NOT NULL,
-party_id bigint NOT NULL,
-old_votes bigint,
-new_votes bigint,
-changed_at timestamp NOT NULL DEFAULT now()
+    municipality_code text NOT NULL,
+    party_id bigint NOT NULL,
+    old_votes bigint,
+    new_votes bigint,
+    changed_at timestamp NOT NULL DEFAULT now()
 );
 
 CREATE FUNCTION audit_party_votes()
 RETURNS trigger AS $$
-    BEGIN
-    IF NEW.votes != OLD.votes THEN
+BEGIN
+    IF NEW.votes <> OLD.votes THEN
         INSERT INTO party_votes_log(
             municipality_code,
             party_id,
@@ -24,7 +24,7 @@ RETURNS trigger AS $$
         );
     END IF;
     RETURN NEW;
-    END;
+END;
 $$ LANGUAGE plpgsql;
 
 CREATE TRIGGER trg_audit_party_votes
