@@ -1,0 +1,275 @@
+# Solutions for Exercise Sheet 1
+
+1:
+
+WITH RECURSIVE seq(n) AS (
+  SELECT 1
+  UNION ALL
+  SELECT n + 1
+  FROM seq
+  WHERE n < 20
+)
+SELECT n
+FROM seq
+ORDER BY n;
+
+2:
+
+SELECT
+  d.id,
+  d.name,
+  COUNT(m.code) AS municipalities,
+  COUNT(m.code) FILTER (WHERE m.mandates > 10) AS municipalities_with_mandates
+FROM district d
+JOIN municipality m
+  ON m.district = d.id
+GROUP BY d.id, d.name
+ORDER BY d.id;
+
+3:
+
+SELECT
+  d.id   AS district_id,
+  d.name AS district_name,
+  m.code AS municipality_code,
+  m.name AS municipality_name,
+  m.mandates,
+  RANK() OVER (
+    PARTITION BY d.id
+    ORDER BY m.mandates DESC
+  ) AS rank_in_district,
+  DENSE_RANK() OVER (
+    PARTITION BY d.id
+    ORDER BY m.mandates DESC
+  ) AS dense_rank_in_district
+FROM municipality m
+JOIN district d ON d.id = m.district
+ORDER BY d.id, m.mandates DESC, m.name;
+
+
+4:
+
+SELECT
+  d.id   AS district_id,
+  d.name AS district_name,
+  m.code AS municipality_code,
+  m.name AS municipality_name,
+  m.mandates,
+  SUM(m.mandates) OVER (PARTITION BY d.id) AS district_total_mandates,
+  m.mandates::numeric
+    / SUM(m.mandates) OVER (PARTITION BY d.id) AS mandates_share
+FROM municipality m
+JOIN district d
+  ON d.id = m.district
+ORDER BY d.id, m.mandates DESC, m.name;
+
+
+5:
+
+WITH lists AS (
+  -- Parties
+  SELECT
+    m.district AS district_id,
+    'party'::text AS list_type,
+    COALESCE(pv.votes, 0)::bigint AS votes
+  FROM party_votes pv
+  JOIN municipality m
+    ON m.code = pv.municipality_code
+
+  UNION ALL
+  -- Coalitions
+  SELECT
+    m.district AS district_id,
+    'coalition'::text AS list_type,
+    COALESCE(c.votes, 0)::bigint AS votes
+  FROM coalition c
+  JOIN municipality m
+    ON m.code = c.municipality_code
+
+  UNION ALL
+  -- Independents
+  SELECT
+    m.district AS district_id,
+    'independent'::text AS list_type,
+    COALESCE(i.votes, 0)::bigint AS votes
+  FROM independent i
+  JOIN municipality m
+    ON m.code = i.municipality_code
+),
+by_district AS (
+  SELECT
+    district_id,
+    SUM(votes) FILTER (WHERE list_type = 'party')       AS party_votes,
+    SUM(votes) FILTER (WHERE list_type = 'coalition')   AS coalition_votes,
+    SUM(votes) FILTER (WHERE list_type = 'independent') AS independent_votes,
+    SUM(votes)                                          AS total_votes
+  FROM lists
+  GROUP BY district_id
+)
+SELECT
+  d.id   AS district_id,
+  d.name AS district_name,
+  bd.party_votes,
+  bd.coalition_votes,
+  bd.independent_votes,
+  bd.total_votes
+FROM by_district bd
+JOIN district d
+  ON d.id = bd.district_id
+ORDER BY d.id;
+
+
+6:
+
+WITH enriched AS (
+  SELECT
+    m.district AS district_id,
+    m.code     AS municipality_code,
+    m.name     AS municipality_name,
+    m.mandates,
+    SUM(m.mandates) OVER (PARTITION BY m.district) AS district_total_mandates,
+    SUM(m.mandates) OVER (
+      PARTITION BY m.district
+      ORDER BY m.mandates DESC, m.name ASC
+      ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+    ) AS cumulative_mandates
+  FROM municipality m
+)
+SELECT
+  d.id   AS district_id,
+  d.name AS district_name,
+  e.municipality_code,
+  e.municipality_name,
+  e.mandates,
+  e.district_total_mandates,
+  e.cumulative_mandates,
+  (e.cumulative_mandates::numeric / e.district_total_mandates) AS cumulative_share
+FROM enriched e
+JOIN district d
+  ON d.id = e.district_id
+ORDER BY d.id, e.mandates DESC, e.municipality_name;
+
+
+7:
+
+WITH built AS (
+  SELECT
+    c.municipality_code,
+    c.shortname AS coalition_shortname,
+    c.name      AS coalition_name,
+    STRING_AGG(p.shortname, '.' ORDER BY cm.order_number) AS members_shortnames
+  FROM coalition c
+  JOIN coalition_member cm
+    ON cm.municipality_code = c.municipality_code
+   AND cm.coalition_shortname = c.shortname
+  JOIN party p
+    ON p.id = cm.party_id
+  GROUP BY c.municipality_code, c.shortname, c.name
+)
+SELECT
+  municipality_code,
+  coalition_shortname,
+  coalition_name,
+  members_shortnames,
+  (members_shortnames = coalition_shortname) AS matches_shortname
+FROM built
+ORDER BY municipality_code, coalition_shortname;
+
+
+8:
+
+WITH RECURSIVE
+params AS (
+  SELECT
+    code AS municipality_code,
+    mandates::int AS mandates
+  FROM municipality
+  WHERE name = 'PORTO'
+),
+lists AS (
+  -- Parties
+  SELECT
+    pv.municipality_code,
+    'party'::text AS list_type,
+    p.shortname,
+    p.name AS list_name,
+    pv.votes::numeric AS votes
+  FROM party_votes pv
+  JOIN party p ON p.id = pv.party_id
+  JOIN params x ON x.municipality_code = pv.municipality_code
+
+  UNION ALL
+  -- Coalitions
+  SELECT
+    c.municipality_code,
+    'coalition'::text,
+    c.shortname,
+    c.name,
+    c.votes::numeric
+  FROM coalition c
+  JOIN params x ON x.municipality_code = c.municipality_code
+
+  UNION ALL
+  -- Independents
+  SELECT
+    i.municipality_code,
+    'independent'::text,
+    i.shortname,
+    i.name,
+    i.votes::numeric
+  FROM independent i
+  JOIN params x ON x.municipality_code = i.municipality_code
+),
+base AS (
+  SELECT
+    p.municipality_code,
+    p.mandates,
+    0::int AS seat_no,
+    l.list_type,
+    l.shortname,
+    l.list_name,
+    l.votes,
+    0::int AS seats
+  FROM params p
+  JOIN lists  l ON l.municipality_code = p.municipality_code
+),
+alloc AS (
+  -- initial state (seat_no = 0)
+  SELECT * FROM base
+
+  UNION ALL
+
+  -- allocate one seat per iteration (seat_no increases by 1)
+  SELECT
+    a.municipality_code,
+    a.mandates,
+    a.seat_no + 1 AS seat_no,
+    a.list_type,
+    a.shortname,
+    a.list_name,
+    a.votes,
+    a.seats
+      + CASE
+          WHEN ROW_NUMBER() OVER (
+                 PARTITION BY a.municipality_code
+                 ORDER BY
+                   (a.votes / (a.seats + 1)) DESC,  -- quotient
+                   a.votes DESC,                     -- tie-breaker 1
+                   a.shortname ASC,                  -- tie-breaker 2
+                   a.list_type ASC                   -- tie-breaker 3
+               ) = 1
+          THEN 1 ELSE 0
+        END AS seats
+  FROM alloc a
+  WHERE a.seat_no < a.mandates
+)
+SELECT
+  municipality_code,
+  list_type,
+  shortname,
+  list_name,
+  votes::bigint AS votes,
+  seats
+FROM alloc
+WHERE seat_no = mandates
+ORDER BY seats DESC, votes DESC, list_type, shortname;
